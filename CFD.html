@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>CFD Lab — Water Flow and Car Aerodynamics</title>
+<style>
+  :root{
+    --bg:#0a0e13; --panel:rgba(14,20,28,.90); --line:#263243; --text:#d6dee9; --dim:#8b99ab; --acc:#5bb8ff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  body{display:flex;flex-direction:column}
+  header{flex:0 0 auto;display:flex;align-items:center;gap:16px;padding:8px 14px;border-bottom:1px solid var(--line);
+    background:#0d131a;z-index:5;flex-wrap:wrap}
+  .brand{font-weight:600;letter-spacing:.02em;white-space:nowrap}
+  .brand small{display:block;font-weight:400;color:var(--dim);font-size:11px;letter-spacing:0}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto}
+  .seg button{background:transparent;color:var(--dim);border:0;padding:8px 14px;font:inherit;cursor:pointer}
+  .seg button.on{background:#16324a;color:#fff}
+  .seg button:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+  #stage{position:relative;flex:1 1 auto;min-height:0}
+  canvas#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  canvas#gl:active{cursor:grabbing}
+  #legend{position:absolute;left:12px;top:12px;width:230px;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;pointer-events:none;z-index:3}
+  #legend .lt{font-size:11px;color:var(--dim);margin-bottom:4px}
+  #legend canvas{width:100%;height:12px;display:block;border-radius:3px}
+  #legend .ll{display:flex;justify-content:space-between;font-size:11px;color:var(--text);margin-top:3px;font-variant-numeric:tabular-nums}
+  #hint{position:absolute;left:12px;bottom:10px;font-size:11px;color:var(--dim);pointer-events:none;z-index:3;
+    text-shadow:0 1px 2px #000}
+  #panel{position:absolute;right:12px;top:12px;bottom:12px;width:318px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;overflow:auto;z-index:4;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  #panelToggle{display:none}
+  .pbody{padding:12px 14px 14px}
+  h2{margin:0 0 4px;font-size:15px}
+  .desc{margin:0 0 12px;color:var(--dim);font-size:12.5px}
+  .ctl{margin:10px 0}
+  .ctl label{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;margin-bottom:2px}
+  .ctl label output{color:var(--acc);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ctl small{display:block;color:var(--dim);font-size:11px;line-height:1.3;margin-top:1px}
+  input[type=range]{width:100%;accent-color:var(--acc);margin:4px 0;height:26px}
+  select{width:100%;background:#101923;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:inherit}
+  .chk{display:flex;align-items:center;gap:8px;font-size:12.5px;margin:10px 0}
+  .chk input{accent-color:var(--acc);width:16px;height:16px}
+  .btnrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:14px 0}
+  .btnrow button{background:#122233;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 4px;font:inherit;
+    font-size:12px;cursor:pointer}
+  .btnrow button:hover{background:#18304a}
+  .btnrow button:focus-visible{outline:2px solid var(--acc)}
+  dl#readouts{display:grid;grid-template-columns:1fr auto;gap:3px 10px;margin:10px 0;padding:10px;border:1px solid var(--line);
+    border-radius:8px;background:rgba(255,255,255,.02);font-size:12.5px}
+  dl#readouts dt{color:var(--dim)} dl#readouts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+  details.model{border-top:1px solid var(--line);padding-top:8px;font-size:12px;color:var(--dim)}
+  details.model summary{cursor:pointer;color:var(--text);font-size:13px;margin-bottom:6px}
+  details.model p{margin:6px 0} details.model ul{margin:4px 0 6px;padding-left:18px} details.model li{margin:3px 0}
+  details.model b{color:var(--text);font-weight:600}
+  [data-for]{display:none}
+  body[data-mode="water"] [data-for="water"], body[data-mode="car"] [data-for="car"]{display:block}
+  #err{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:min(520px,90%);background:#2a1216;
+    border:1px solid #7a2a35;color:#ffd5da;padding:16px 18px;border-radius:10px;z-index:10;display:none}
+  #toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#16324a;border:1px solid var(--line);
+    padding:6px 12px;border-radius:6px;font-size:12px;z-index:6;display:none}
+  @media (max-width:820px){
+    header{padding:6px 10px;gap:8px}
+    .seg{margin-left:0;width:100%}.seg button{flex:1;padding:9px 6px}
+    #legend{width:170px;padding:6px 8px;top:8px;left:8px}
+    #panel{left:0;right:0;top:auto;bottom:0;width:auto;max-height:46%;border-radius:12px 12px 0 0;border-left:0;border-right:0;border-bottom:0}
+    #panel.collapsed{max-height:42px;overflow:hidden}
+    #panelToggle{display:block;width:100%;background:transparent;border:0;color:var(--text);font:inherit;font-weight:600;
+      padding:11px 14px;text-align:left;cursor:pointer;position:sticky;top:0;background:var(--panel)}
+    #hint{display:none}
+  }
+</style>
+</head>
+<body data-mode="water">
+<header>
+  <div class="brand">CFD Lab<small>Lattice-Boltzmann educational demo</small></div>
+  <div class="seg" role="tablist" aria-label="Simulation mode">
+    <button id="modeWater" class="on" role="tab" aria-selected="true">1 · Water flow</button>
+    <button id="modeCar" role="tab" aria-selected="false">2 · Airflow around a car</button>
+  </div>
+</header>
+
+<main id="stage">
+  <canvas id="gl" aria-label="Interactive 3D flow visualisation"></canvas>
+
+  <div id="legend">
+    <div class="lt" id="lgTitle">Flow speed (m/s)</div>
+    <canvas id="lgCanvas" width="256" height="12"></canvas>
+    <div class="ll"><span>0</span><span id="lgMid"></span><span id="lgMax"></span></div>
+  </div>
+  <div id="hint">Drag: orbit · Wheel / pinch: zoom · Right-drag or two-finger drag: pan</div>
+
+  <aside id="panel">
+    <button id="panelToggle" aria-expanded="true">Controls &amp; model ▾</button>
+    <div class="pbody">
+      <h2 id="modeTitle"></h2>
+      <p class="desc" id="modeDesc"></p>
+
+      <!-- WATER CONTROLS -->
+      <div data-for="water">
+        <div class="ctl"><label for="wSpeed">Flow speed <output id="wSpeedO"></output></label>
+          <input id="wSpeed" type="range" min="0.2" max="2" step="0.05" value="1">
+          <small>Sets the inflow velocity. Faster flow → stronger wake, deeper surface dips.</small></div>
+        <div class="ctl"><label for="wVisc">Viscosity <output id="wViscO"></output></label>
+          <input id="wVisc" type="range" min="0" max="100" step="1" value="11">
+          <small>Kinematic-viscosity multiplier. Low → unsteady vortex shedding; high → smooth, viscous flow.</small></div>
+        <div class="ctl"><label for="wGrav">Gravity <output id="wGravO"></output></label>
+          <input id="wGrav" type="range" min="1" max="25" step="0.1" value="9.81">
+          <small>Sets surface-wave speed and how far pressure deflects the surface (∝ 1/g).</small></div>
+        <div class="ctl"><label for="wObs">Obstacle</label>
+          <select id="wObs"><option value="cyl">Cylinder</option><option value="twin">Twin cylinders</option><option value="con">Channel contraction</option></select></div>
+        <div class="ctl"><label for="wDye">Tracer colour</label>
+          <select id="wDye"><option value="vel">Velocity colour map</option><option value="dye">Dye (single hue)</option></select></div>
+        <label class="chk"><input type="checkbox" id="wSlice" checked> Show speed map on tank floor</label>
+      </div>
+
+      <!-- CAR CONTROLS -->
+      <div data-for="car">
+        <div class="ctl"><label for="cSpeed">Air speed <output id="cSpeedO"></output></label>
+          <input id="cSpeed" type="range" min="5" max="60" step="1" value="30">
+          <small>Free-stream velocity entering the tunnel. Colours rescale with the speed.</small></div>
+        <div class="ctl"><label for="cVisc">Air viscosity <output id="cViscO"></output></label>
+          <input id="cVisc" type="range" min="0" max="100" step="1" value="15">
+          <small>Kinematic-viscosity multiplier. Higher → thicker boundary layers, calmer wake; lower → livelier, longer wake.</small></div>
+        <label class="chk"><input type="checkbox" id="cSlice" checked> Show centre-plane speed map on tunnel wall</label>
+      </div>
+
+      <div class="btnrow">
+        <button id="btnPause">Pause</button>
+        <button id="btnResetSim">Reset sim</button>
+        <button id="btnResetCam">Reset camera</button>
+      </div>
+
+      <dl id="readouts"></dl>
+
+      <details class="model" open>
+        <summary>Model &amp; limitations</summary>
+        <p><b>Solver.</b> A 2-D D2Q9 lattice-Boltzmann (BGK) solver with a Smagorinsky-type sub-grid viscosity for stability. Streamlines are integrated (RK2) through the <i>computed</i> velocity field every other frame; bright pulses travel at the local flow speed.</p>
+        <ul data-for-list="car">
+          <li><b>Car:</b> solved on the vertical centre-plane (side view). The spanwise lines are copies of that 2-D solution, blended to free-stream away from the body — a visual approximation, not a 3-D solve.</li>
+          <li>Ground is a free-slip floor (a rough stand-in for a moving belt). The simulated Reynolds number (~10²–10³) is far below the real ~10⁷; both are shown.</li>
+          <li><b>C<sub>d</sub></b> is a 2-D slice momentum-exchange estimate — indicative only.</li>
+        </ul>
+        <ul data-for-list="water">
+          <li><b>Water:</b> depth-averaged flow in plan view. Surface height comes from the solver’s pressure field (Bernoulli-like) driving a damped wave equation for ripples, advected by the flow. It is not a free-surface or 3-D solver.</li>
+          <li>Simulated Re (~10²) is far below real water flow (~10⁵); both are shown.</li>
+        </ul>
+        <p><b>Not a validated engineering CFD tool.</b> Use it to build intuition, not to predict drag or loads. Solver steps per frame adapt to your device.</p>
+      </details>
+    </div>
+  </aside>
+
+  <div id="err"></div>
+  <div id="toast"></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onerror="window.__threeFailed=true"></script>
+<script>
+(function () {
+'use strict';
+
+/* ======================================================================
+   0. Start-up checks
+   ====================================================================== */
+const $ = id => document.getElementById(id);
+function showError(msg) { const e = $('err'); e.style.display = 'block'; e.innerHTML = msg; }
+if (typeof THREE === 'undefined') {
+  showError('<b>Could not load Three.js from the CDN.</b><br>This demo needs an internet connection to fetch ' +
+            '<code>three.min.js</code> (cdnjs.cloudflare.com). Check your connection or content blocker and reload.');
+  return;
+}
+
+//<<PHYS-BEGIN  (pure numerics: no DOM / WebGL below this marker until PHYS-END)
+/* ======================================================================
+   1. Utilities and colour map
+   ====================================================================== */
+const clamp = (x, a, b) => x < a ? a : (x > b ? b : x);
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+// Polynomial approximation of the "Turbo" colour map (Google, Apache-2.0). t in [0,1] -> rgb in [0,1]
+function turboRGB(t) {
+  t = clamp(t, 0, 1);
+  const r = 0.13572138 + t * (4.61539260 + t * (-42.66032258 + t * (132.13108234 + t * (-152.94239396 + t * 59.28637943))));
+  const g = 0.09140261 + t * (2.19418839 + t * (4.84296658 + t * (-14.18503333 + t * (4.27729857 + t * 2.82956604))));
+  const b = 0.10667330 + t * (12.64194608 + t * (-60.58204836 + t * (110.36276771 + t * (-89.90310912 + t * 27.34824973))));
+  return [clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1)];
+}
+const LUT = new Uint8Array(256 * 3);
+for (let i = 0; i < 256; i++) { const c = turboRGB(i / 255); LUT[i * 3] = c[0] * 255; LUT[i * 3 + 1] = c[1] * 255; LUT[i * 3 + 2] = c[2] * 255; }
+
+function pointInPoly(poly, x, y) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+/* ======================================================================
+   2. Lattice-Boltzmann solver (D2Q9, BGK, Smagorinsky-type sub-grid viscosity)
+      Lattice units: dx = dt = 1, sound speed^2 = 1/3, nu = (tau - 1/2)/3.
+      Layout: f[i*N + n], i = direction, n = cell index.
+   ====================================================================== */
+const CX = [0, 1, 0, -1, 0, 1, -1, -1, 1];
+const CY = [0, 0, 1, 0, -1, 1, 1, -1, -1];
+const OPP = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+const REFL = [0, 1, 4, 3, 2, 8, 7, 6, 5];       // mirror in y (free-slip walls)
+const WGT = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+
+class LBM {
+  constructor(nx, ny) {
+    this.nx = nx; this.ny = ny; const N = nx * ny; this.N = N;
+    this.f = new Float32Array(9 * N);       // populations after streaming
+    this.fp = new Float32Array(9 * N);      // populations after collision
+    this.solid = new Uint8Array(N);         // 1 = obstacle / wall node
+    this.ux = new Float32Array(N); this.uy = new Float32Array(N); this.rho = new Float32Array(N);
+    this.uIn = 0.05; this.uCur = 0.05; this.nu = 0.02; this.cs2 = 0.0144;
+    this.trackForce = false; this.fx = 0; this.steps = 0;
+  }
+  feq(i, r, u, v) {
+    const usq = 1.5 * (u * u + v * v), cu = CX[i] * u + CY[i] * v;
+    return WGT[i] * r * (1 + 3 * cu + 4.5 * cu * cu - usq);
+  }
+  reset(uIn) {
+    const N = this.N; this.uIn = uIn; this.uCur = uIn; this.steps = 0; this.fx = 0;
+    for (let i = 0; i < 9; i++) { const e = this.feq(i, 1, uIn, 0); for (let n = 0; n < N; n++) { this.f[i * N + n] = e; this.fp[i * N + n] = e; } }
+    for (let n = 0; n < N; n++) { this.rho[n] = 1; this.ux[n] = this.solid[n] ? 0 : uIn; this.uy[n] = 0; }
+  }
+  step() {
+    const nx = this.nx, ny = this.ny, N = this.N, f = this.f, fp = this.fp, solid = this.solid;
+    const ux = this.ux, uy = this.uy, rho = this.rho;
+    const tau = 3 * this.nu + 0.5, cs2 = this.cs2, track = this.trackForce;
+    this.uCur += (this.uIn - this.uCur) * 0.003;      // relax inlet velocity smoothly toward target
+    let fxA = 0;
+
+    // ---- collision (BGK with locally increased relaxation time from sub-grid model)
+    for (let n = 0; n < N; n++) {
+      if (solid[n]) continue;
+      const f0 = f[n], f1 = f[N + n], f2 = f[2 * N + n], f3 = f[3 * N + n], f4 = f[4 * N + n];
+      const f5 = f[5 * N + n], f6 = f[6 * N + n], f7 = f[7 * N + n], f8 = f[8 * N + n];
+      const r = f0 + f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8;
+      const u = (f1 - f3 + f5 - f6 - f7 + f8) / r, v = (f2 - f4 + f5 + f6 - f7 - f8) / r;
+      const usq = 1.5 * (u * u + v * v), a = u + v, b = v - u;
+      const q1 = 4.5 * u * u, q2 = 4.5 * v * v, q5 = 4.5 * a * a, q6 = 4.5 * b * b;
+      const r9 = r / 9, r36 = r / 36;
+      const n0 = f0 - (4 / 9) * r * (1 - usq);
+      const n1 = f1 - r9 * (1 + 3 * u + q1 - usq);
+      const n2 = f2 - r9 * (1 + 3 * v + q2 - usq);
+      const n3 = f3 - r9 * (1 - 3 * u + q1 - usq);
+      const n4 = f4 - r9 * (1 - 3 * v + q2 - usq);
+      const n5 = f5 - r36 * (1 + 3 * a + q5 - usq);
+      const n6 = f6 - r36 * (1 + 3 * b + q6 - usq);
+      const n7 = f7 - r36 * (1 - 3 * a + q5 - usq);
+      const n8 = f8 - r36 * (1 - 3 * b + q6 - usq);
+      const pxx = n1 + n3 + n5 + n6 + n7 + n8, pyy = n2 + n4 + n5 + n6 + n7 + n8, pxy = n5 - n6 + n7 - n8;
+      const Q = Math.sqrt(pxx * pxx + pyy * pyy + 2 * pxy * pxy);
+      const om = 1 / (0.5 * (tau + Math.sqrt(tau * tau + 25.4558 * cs2 * Q / r)));   // 18*sqrt(2)
+      fp[n] = f0 - om * n0; fp[N + n] = f1 - om * n1; fp[2 * N + n] = f2 - om * n2; fp[3 * N + n] = f3 - om * n3;
+      fp[4 * N + n] = f4 - om * n4; fp[5 * N + n] = f5 - om * n5; fp[6 * N + n] = f6 - om * n6;
+      fp[7 * N + n] = f7 - om * n7; fp[8 * N + n] = f8 - om * n8;
+      ux[n] = u; uy[n] = v; rho[n] = r;
+    }
+
+    // ---- streaming (pull). Solid neighbours: half-way bounce-back. Domain top/bottom outside: free-slip mirror.
+    for (let y = 0; y < ny; y++) {
+      const row = y * nx;
+      for (let x = 0; x < nx; x++) {
+        const n = row + x;
+        if (solid[n]) continue;
+        for (let i = 0; i < 9; i++) {
+          const sx0 = x - CX[i], sy = y - CY[i];
+          const sx = sx0 < 0 ? 0 : (sx0 >= nx ? nx - 1 : sx0);
+          let val;
+          if (sy < 0 || sy >= ny) {
+            const s = row + sx;
+            val = solid[s] ? fp[OPP[i] * N + n] : fp[REFL[i] * N + s];
+          } else {
+            const s = sy * nx + sx;
+            if (solid[s]) {
+              val = fp[OPP[i] * N + n];
+              if (track) fxA += 2 * val * (-CX[i]);           // momentum exchange with the body
+            } else val = fp[i * N + s];
+          }
+          f[i * N + n] = val;
+        }
+      }
+    }
+
+    // ---- boundaries: inlet = equilibrium at current inlet speed, outlet = zero-gradient
+    const uc = this.uCur;
+    for (let y = 0; y < ny; y++) {
+      const n = y * nx;
+      if (!solid[n]) for (let i = 0; i < 9; i++) f[i * N + n] = this.feq(i, 1, uc, 0);
+      const m = n + nx - 1;
+      if (!solid[m]) for (let i = 0; i < 9; i++) f[i * N + m] = f[i * N + m - 1];
+    }
+    this.fx += (fxA - this.fx) * 0.004;
+    this.steps++;
+  }
+  healthy() {
+    const n = (this.ny >> 1) * this.nx + (this.nx >> 1);
+    const r = this.rho[n], u = this.ux[n];
+    return isFinite(r) && isFinite(u) && r > 0.6 && r < 1.6 && Math.abs(u) < 0.45;
+  }
+  peakSpeed() {
+    let m = 0;
+    for (let n = 0; n < this.N; n++) { const s = this.ux[n] * this.ux[n] + this.uy[n] * this.uy[n]; if (s > m) m = s; }
+    return Math.sqrt(m);
+  }
+}
+
+/* ======================================================================
+   3. Streamline tracing through the computed velocity field (RK2 midpoint)
+      Output per point: cell-space position, travel "time" (lattice steps), local speed.
+   ====================================================================== */
+const _va = [0, 0], _vb = [0, 0];
+function sampleVel(L, x, y, out) {
+  const nx = L.nx;
+  x = clamp(x, 0, nx - 1.001); y = clamp(y, 0, L.ny - 1.001);
+  const i = x | 0, j = y | 0, fx = x - i, fy = y - j, n = j * nx + i, ux = L.ux, uy = L.uy;
+  out[0] = (ux[n] * (1 - fx) + ux[n + 1] * fx) * (1 - fy) + (ux[n + nx] * (1 - fx) + ux[n + nx + 1] * fx) * fy;
+  out[1] = (uy[n] * (1 - fx) + uy[n + 1] * fx) * (1 - fy) + (uy[n + nx] * (1 - fx) + uy[n + nx + 1] * fx) * fy;
+}
+function traceLine(L, x0, y0, maxPts, ds, T) {
+  const nx = L.nx, ny = L.ny, solid = L.solid;
+  let x = x0, y = y0, time = 0, n = 0;
+  for (let k = 0; k < maxPts; k++) {
+    if (x < 0 || x > nx - 1.01 || y < 0 || y > ny - 1.01) break;
+    if (solid[((y + 0.5) | 0) * nx + ((x + 0.5) | 0)]) break;
+    sampleVel(L, x, y, _va);
+    const sp = Math.hypot(_va[0], _va[1]);
+    if (sp < 1e-5) break;
+    T.x[k] = x; T.y[k] = y; T.p[k] = time; T.v[k] = sp; n++;
+    const mx = x + 0.5 * ds * _va[0] / sp, my = y + 0.5 * ds * _va[1] / sp;
+    if (mx < 0 || mx > nx - 1.01 || my < 0 || my > ny - 1.01 || solid[((my + 0.5) | 0) * nx + ((mx + 0.5) | 0)]) break;
+    sampleVel(L, mx, my, _vb);
+    const sp2 = Math.hypot(_vb[0], _vb[1]);
+    if (sp2 < 1e-5) break;
+    x += ds * _vb[0] / sp2; y += ds * _vb[1] / sp2;
+    time += ds / Math.max(sp2, 0.004);
+  }
+  return n;
+}
+function makeTrace(n) { return { x: new Float32Array(n), y: new Float32Array(n), p: new Float32Array(n), v: new Float32Array(n) }; }
+//<<PHYS-END
+
+/* ======================================================================
+   4. Renderer, camera, environment
+   ====================================================================== */
+const stage = $('stage'), canvas = $('gl');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  showError('<b>WebGL is not available.</b><br>This demo needs a browser with WebGL enabled.');
+  return;
+}
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e13);
+scene.fog = new THREE.Fog(0x0a0e13, 22, 48);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 120);
+const RES = new THREE.Vector2(1, 1);                 // drawing-buffer size, shared by ribbon shaders
+
+// Procedural studio environment (gradient sky + soft boxes) for metal / water reflections
+(function buildEnvironment() {
+  try {
+    const env = new THREE.Scene();
+    const g = new THREE.SphereGeometry(50, 48, 24);
+    const col = new Float32Array(g.attributes.position.count * 3);
+    for (let i = 0; i < g.attributes.position.count; i++) {
+      const y = g.attributes.position.getY(i) / 50;
+      let r, gg, b;
+      if (y > 0) { const t = Math.pow(y, 0.6); r = 0.42 + 0.35 * t; gg = 0.47 + 0.38 * t; b = 0.55 + 0.42 * t; }
+      else { const t = Math.pow(-y, 0.5); r = 0.42 - 0.36 * t; gg = 0.44 - 0.38 * t; b = 0.48 - 0.42 * t; }
+      col[i * 3] = r; col[i * 3 + 1] = gg; col[i * 3 + 2] = b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    env.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+    const box = (w, h, pos, k) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+      m.material.color.setRGB(k, k, k); m.position.set(pos[0], pos[1], pos[2]); m.lookAt(0, 0, 0); env.add(m);
+    };
+    box(26, 7, [0, 24, 0], 7); box(4, 14, [-26, 9, 8], 5); box(4, 14, [26, 9, -8], 4); box(18, 3, [0, 7, -28], 3);
+    const pm = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm.fromScene(env, 0.03).texture;
+    pm.dispose();
+  } catch (e) { /* reflections are optional */ }
+})();
+
+scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x1a1f27, 0.45));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(5, 10, 6); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 30 });
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+/* ---- orbit camera (mouse + touch + wheel), with animated reset ---- */
+class Orbit {
+  constructor(cam, el) {
+    this.cam = cam; this.el = el; this.target = new THREE.Vector3(); this.theta = 0.6; this.phi = 1.2; this.r = 10;
+    this.vt = 0; this.vp = 0; this.goal = null; this.ptrs = new Map(); this.pinch = 0;
+    el.style.touchAction = 'none';
+    el.addEventListener('pointerdown', e => {
+      el.setPointerCapture(e.pointerId); this.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); this.goal = null;
+      if (this.ptrs.size === 2) this.pinch = this._dist();
+    });
+    el.addEventListener('pointermove', e => {
+      const p = this.ptrs.get(e.pointerId); if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      if (this.ptrs.size === 1) {
+        if (e.buttons & 2 || e.shiftKey) this._pan(dx, dy);
+        else { this.vt = -dx * 0.006; this.vp = -dy * 0.006; this.theta += this.vt; this.phi = clamp(this.phi + this.vp, 0.12, 1.52); }
+      } else if (this.ptrs.size === 2) {
+        const before = this._mid(); p.x = e.clientX; p.y = e.clientY;
+        const d = this._dist(), m = this._mid();
+        if (this.pinch > 0 && d > 0) this.r = clamp(this.r * this.pinch / d, 1.5, 32);
+        this.pinch = d; this._pan(m.x - before.x, m.y - before.y);
+        return;
+      }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const up = e => { this.ptrs.delete(e.pointerId); this.pinch = 0; };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', e => { e.preventDefault(); this.goal = null; this.r = clamp(this.r * Math.exp(e.deltaY * 0.0012), 1.5, 32); }, { passive: false });
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  _dist() { const a = [...this.ptrs.values()]; return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
+  _mid() { const a = [...this.ptrs.values()]; return a.length < 2 ? { x: 0, y: 0 } : { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 }; }
+  _pan(dx, dy) {
+    const s = this.r * 0.0017, right = new THREE.Vector3(), up = new THREE.Vector3();
+    this.cam.matrixWorld.extractBasis(right, up, new THREE.Vector3());
+    this.target.addScaledVector(right, -dx * s).addScaledVector(up, dy * s);
+    this.target.y = Math.max(0, this.target.y);
+  }
+  animateTo(g) { this.goal = g; }
+  jumpTo(g) { this.target.copy(g.target); this.theta = g.theta; this.phi = g.phi; this.r = g.r; this.goal = null; }
+  update() {
+    if (this.goal) {
+      const g = this.goal, k = 0.14;
+      this.target.lerp(g.target, k); this.theta += (g.theta - this.theta) * k; this.phi += (g.phi - this.phi) * k; this.r += (g.r - this.r) * k;
+      if (Math.abs(g.theta - this.theta) + Math.abs(g.phi - this.phi) + Math.abs(g.r - this.r) < 0.002) { this.jumpTo(g); }
+    } else if (this.ptrs.size === 0 && (Math.abs(this.vt) > 1e-5 || Math.abs(this.vp) > 1e-5)) {   // gentle inertia
+      this.vt *= 0.92; this.vp *= 0.92; this.theta += this.vt; this.phi = clamp(this.phi + this.vp, 0.12, 1.52);
+    }
+    const s = Math.sin(this.phi);
+    this.cam.position.set(this.target.x + this.r * s * Math.sin(this.theta), this.target.y + this.r * Math.cos(this.phi),
+                          this.target.z + this.r * s * Math.cos(this.theta));
+    this.cam.lookAt(this.target);
+    this.cam.updateMatrixWorld();
+  }
+}
+const orbit = new Orbit(camera, canvas);
+
+/* ======================================================================
+   5. Shared rendering helpers: ribbons (screen-space-wide streamlines), labels, grids
+   ====================================================================== */
+const RIBBON_VS = `
+  attribute vec3 aNext; attribute float aSide; attribute vec3 aVal;
+  uniform vec2 uRes; uniform float uWidth;
+  varying vec3 vVal;
+  void main(){
+    mat4 mvp = projectionMatrix * modelViewMatrix;
+    vec4 p = mvp * vec4(position, 1.0);
+    vec4 q = mvp * vec4(aNext, 1.0);
+    vec2 d = (q.xy / q.w - p.xy / p.w) * uRes;        // segment direction in pixels
+    float L = length(d);
+    d = L > 1e-4 ? d / L : vec2(1.0, 0.0);
+    vec2 nrm = vec2(-d.y, d.x);
+    p.xy += nrm * aSide * uWidth / uRes * p.w;          // widen to a constant pixel width
+    vVal = aVal;
+    gl_Position = p;
+  }`;
+const RIBBON_FS = `
+  varying vec3 vVal;
+  uniform float uPhase, uPeriod, uMode, uAlpha;
+  vec3 turbo(float t){
+    float r = 0.13572138 + t*(4.61539260 + t*(-42.66032258 + t*(132.13108234 + t*(-152.94239396 + t*59.28637943))));
+    float g = 0.09140261 + t*(2.19418839 + t*(4.84296658 + t*(-14.18503333 + t*(4.27729857 + t*2.82956604))));
+    float b = 0.10667330 + t*(12.64194608 + t*(-60.58204836 + t*(110.36276771 + t*(-89.90310912 + t*27.34824973))));
+    return clamp(vec3(r,g,b), 0.0, 1.0);
+  }
+  void main(){
+    if (vVal.z < 0.02) discard;
+    float t = clamp(vVal.x, 0.0, 1.0);
+    vec3 col = uMode < 0.5 ? turbo(t) : mix(vec3(0.10, 0.52, 0.98), vec3(0.88, 0.98, 1.0), t);
+    float ph = fract((vVal.y - uPhase) / uPeriod);      // pulse pattern advected with the local flow
+    float pulse = pow(1.0 - ph, 3.0);
+    col *= 0.78 + 0.45 * pulse;
+    gl_FragColor = vec4(col, vVal.z * uAlpha * (0.38 + 0.62 * pulse));
+  }`;
+
+class Ribbons {
+  constructor(nLines, nPts) {
+    this.nL = nLines; this.nP = nPts;
+    const V = nLines * nPts * 2;
+    this.pos = new Float32Array(V * 3); this.nxt = new Float32Array(V * 3); this.val = new Float32Array(V * 3);
+    const side = new Float32Array(V); for (let i = 0; i < V; i++) side[i] = (i & 1) ? 1 : -1;
+    const idx = new Uint32Array(nLines * (nPts - 1) * 6); let q = 0;
+    for (let l = 0; l < nLines; l++) for (let k = 0; k < nPts - 1; k++) {
+      const a = (l * nPts + k) * 2;
+      idx[q++] = a; idx[q++] = a + 1; idx[q++] = a + 2; idx[q++] = a + 1; idx[q++] = a + 3; idx[q++] = a + 2;
+    }
+    const g = new THREE.BufferGeometry();
+    const dyn = (arr, n) => new THREE.BufferAttribute(arr, n).setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('position', dyn(this.pos, 3)); g.setAttribute('aNext', dyn(this.nxt, 3));
+    g.setAttribute('aVal', dyn(this.val, 3)); g.setAttribute('aSide', new THREE.BufferAttribute(side, 1));
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+    this.geometry = g;
+    this.material = new THREE.ShaderMaterial({
+      uniforms: { uRes: { value: RES }, uWidth: { value: 1.8 }, uPhase: { value: 0 }, uPeriod: { value: 60 }, uMode: { value: 0 }, uAlpha: { value: 0.95 } },
+      vertexShader: RIBBON_VS, fragmentShader: RIBBON_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide
+    });
+    this.mesh = new THREE.Mesh(g, this.material); this.mesh.frustumCulled = false; this.mesh.renderOrder = 2;
+  }
+  setPoint(l, k, x, y, z, ph, v, fade) {
+    const o = (l * this.nP + k) * 6, p = this.pos, a = this.val;
+    p[o] = p[o + 3] = x; p[o + 1] = p[o + 4] = y; p[o + 2] = p[o + 5] = z;
+    a[o] = a[o + 3] = v; a[o + 1] = a[o + 4] = ph; a[o + 2] = a[o + 5] = fade;
+  }
+  finishLine(l, n) {
+    const nP = this.nP, base = l * nP * 6, p = this.pos, nx = this.nxt, a = this.val;
+    if (n < 2) n = 0;
+    for (let k = 0; k < nP; k++) {
+      const o = base + k * 6;
+      if (k < n) {
+        let ex, ey, ez;
+        if (k < n - 1) { ex = p[o + 6]; ey = p[o + 7]; ez = p[o + 8]; }
+        else { ex = 2 * p[o] - p[o - 6]; ey = 2 * p[o + 1] - p[o - 5]; ez = 2 * p[o + 2] - p[o - 4]; }
+        nx[o] = nx[o + 3] = ex; nx[o + 1] = nx[o + 4] = ey; nx[o + 2] = nx[o + 5] = ez;
+      } else {      // unused tail: collapse onto last valid point (or origin) and hide
+        const s = n > 0 ? base + (n - 1) * 6 : o;
+        const px = n > 0 ? p[s] : 0, py = n > 0 ? p[s + 1] : 0, pz = n > 0 ? p[s + 2] : 0;
+        p[o] = p[o + 3] = nx[o] = nx[o + 3] = px; p[o + 1] = p[o + 4] = nx[o + 1] = nx[o + 4] = py; p[o + 2] = p[o + 5] = nx[o + 2] = nx[o + 5] = pz;
+        a[o + 2] = a[o + 5] = 0;
+      }
+    }
+  }
+  commit() { const at = this.geometry.attributes; at.position.needsUpdate = at.aNext.needsUpdate = at.aVal.needsUpdate = true; }
+  resize() { this.material.uniforms.uWidth.value = 1.8 * renderer.getPixelRatio(); }
+}
+
+function makeLabel(text, scale, color) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+  const g = c.getContext('2d'); g.font = '600 40px system-ui, sans-serif'; g.fillStyle = color || '#cfe6ff';
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 6; g.fillText(text, 256, 48);
+  const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
+  s.scale.set(scale, scale * 96 / 512, 1); return s;
+}
+function makeGrid(w, d, step, y, color, opacity) {
+  const pts = [];
+  for (let x = -w / 2; x <= w / 2 + 1e-6; x += step) pts.push(x, y, -d / 2, x, y, d / 2);
+  for (let z = -d / 2; z <= d / 2 + 1e-6; z += step) pts.push(-w / 2, y, z, w / 2, y, z);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
+}
+function makeSliceTexture(nx, ny) {
+  const data = new Uint8Array(nx * ny * 4);
+  const tex = new THREE.DataTexture(data, nx, ny, THREE.RGBAFormat);
+  tex.minFilter = tex.magFilter = THREE.LinearFilter; tex.encoding = THREE.sRGBEncoding; tex.needsUpdate = true;
+  return { tex, data };
+}
+// Fill an RGBA slice texture from the solver's current speed field
+function fillSlice(S, L, cmaxLat) {
+  const d = S.data, N = L.N, ux = L.ux, uy = L.uy, solid = L.solid, inv = 255 / cmaxLat;
+  for (let n = 0; n < N; n++) {
+    const o = n * 4;
+    if (solid[n]) { d[o + 3] = 0; continue; }
+    const k = Math.min(255, (Math.sqrt(ux[n] * ux[n] + uy[n] * uy[n]) * inv) | 0) * 3;
+    d[o] = LUT[k]; d[o + 1] = LUT[k + 1]; d[o + 2] = LUT[k + 2]; d[o + 3] = 255;
+  }
+  S.tex.needsUpdate = true;
+}
+function fade(k, n) { return Math.min(1, (k + 1) / 8, (n - 1 - k) / 10); }
+
+/* ======================================================================
+   6. MODE 1 — WATER FLOW
+   ====================================================================== */
+function makeWaterMode() {
+  const nx = 160, ny = 64, dx = 0.025;
+  const Lx = (nx - 1) * dx, Wz = (ny - 1) * dx, D0 = 0.55;       // tank length, width, still-water depth (m)
+  const lbm = new LBM(nx, ny);
+  const group = new THREE.Group();
+  const P = { U: 1.0, visc: 1.0, g: 9.81, obs: 'cyl', dye: 'vel', slice: true };
+  const OBS = {
+    cyl:  { Lc: 0.30, cmax: 1.6, uScale: 1.0,  circles: [[1.0, Wz / 2, 0.15]], polys: [] },
+    twin: { Lc: 0.22, cmax: 1.8, uScale: 0.9,  circles: [[1.0, Wz * 0.30, 0.11], [1.0, Wz * 0.70, 0.11]], polys: [] },
+    con:  { Lc: Wz - 0.76, cmax: 2.4, uScale: 0.62, circles: [],
+            polys: [[[1.0, 0], [1.6, 0.38], [2.3, 0.38], [2.9, 0]], [[1.0, Wz], [1.6, Wz - 0.38], [2.3, Wz - 0.38], [2.9, Wz]]] }
+  };
+
+  /* --- static scene: tank, floor, water body, glass --- */
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(Lx + 0.14, 0.05, Wz + 0.14),
+    new THREE.MeshStandardMaterial({ color: 0x1b2430, roughness: 0.65, metalness: 0.1 }));
+  floor.position.y = -0.025; floor.receiveShadow = true; group.add(floor);
+  const grid = makeGrid(Lx, Wz, 0.25, 0.002, 0x3a4c60, 0.35); group.add(grid);
+
+  const sliceTex = makeSliceTexture(nx, ny);
+  const slice = new THREE.Mesh(new THREE.PlaneGeometry(Lx, Wz),
+    new THREE.MeshBasicMaterial({ map: sliceTex.tex, transparent: true, opacity: 0.55, side: THREE.DoubleSide, toneMapped: false, depthWrite: false }));
+  slice.geometry.rotateX(Math.PI / 2); slice.position.y = 0.006; group.add(slice);
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(Lx, D0 - 0.03, Wz),
+    new THREE.MeshStandardMaterial({ color: 0x1b6c99, transparent: true, opacity: 0.22, roughness: 0.1, depthWrite: false }));
+  body.position.y = (D0 - 0.03) / 2; body.renderOrder = 1; group.add(body);
+
+  const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.09, roughness: 0.02, metalness: 0, side: THREE.DoubleSide, depthWrite: false });
+  const wallH = 0.72;
+  [[0, wallH / 2, Wz / 2 + 0.02, Lx + 0.08, wallH, 0.02], [0, wallH / 2, -Wz / 2 - 0.02, Lx + 0.08, wallH, 0.02],
+   [Lx / 2 + 0.02, wallH / 2, 0, 0.02, wallH, Wz + 0.08], [-Lx / 2 - 0.02, wallH / 2, 0, 0.02, wallH, Wz + 0.08]].forEach(w => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w[3], w[4], w[5]), glassMat); m.position.set(w[0], w[1], w[2]); m.renderOrder = 4; group.add(m);
+  });
+  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(Lx + 0.04, wallH, Wz + 0.04)),
+    new THREE.LineBasicMaterial({ color: 0x5f7f9f, transparent: true, opacity: 0.6 }));
+  frame.position.y = wallH / 2; group.add(frame);
+
+  /* --- free surface: height field driven by solver pressure + damped, advected wave equation --- */
+  const sPos = new Float32Array(nx * ny * 3), sIdx = new Uint32Array((nx - 1) * (ny - 1) * 6);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const o = (j * nx + i) * 3; sPos[o] = i * dx - Lx / 2; sPos[o + 1] = D0; sPos[o + 2] = j * dx - Wz / 2; }
+  { let q = 0; for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+      sIdx[q++] = a; sIdx[q++] = c; sIdx[q++] = b; sIdx[q++] = b; sIdx[q++] = c; sIdx[q++] = d; } }
+  const sGeo = new THREE.BufferGeometry();
+  sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3).setUsage(THREE.DynamicDrawUsage));
+  sGeo.setIndex(new THREE.BufferAttribute(sIdx, 1));
+  const surface = new THREE.Mesh(sGeo, new THREE.MeshPhysicalMaterial({
+    color: 0x2b8fc2, transparent: true, opacity: 0.5, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04,
+    envMapIntensity: 1.5, side: THREE.DoubleSide, depthWrite: false }));
+  surface.renderOrder = 3; surface.frustumCulled = false; group.add(surface);
+
+  const N = nx * ny;
+  const eta = new Float32Array(N), etaV = new Float32Array(N), target = new Float32Array(N);
+  const tmpA = new Float32Array(N), tmpB = new Float32Array(N);
+
+  function updateSurface(spf) {
+    // 1) target elevation from solver pressure: eta_t = Cp * U^2 / (2 g)   (Cp = dynamic-pressure coefficient)
+    const uc = Math.max(lbm.uCur, 1e-4), scale = P.U * P.U / (2 * P.g), cpScale = (1 / 3) / (0.5 * uc * uc);
+    for (let n = 0; n < N; n++) target[n] = lbm.solid[n] ? 0 : clamp((lbm.rho[n] - 1) * cpScale, -2.2, 1.4) * scale;
+    // 2) semi-Lagrangian advection of the ripple field by the flow
+    const adv = spf * 0.85;
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const n = j * nx + i;
+      const x = clamp(i - lbm.ux[n] * adv, 0, nx - 1.001), y = clamp(j - lbm.uy[n] * adv, 0, ny - 1.001);
+      const i0 = x | 0, j0 = y | 0, fx = x - i0, fy = y - j0, m = j0 * nx + i0;
+      tmpA[n] = (eta[m] * (1 - fx) + eta[m + 1] * fx) * (1 - fy) + (eta[m + nx] * (1 - fx) + eta[m + nx + 1] * fx) * fy;
+      tmpB[n] = (etaV[m] * (1 - fx) + etaV[m + 1] * fx) * (1 - fy) + (etaV[m + nx] * (1 - fx) + etaV[m + nx + 1] * fx) * fy;
+    }
+    eta.set(tmpA); etaV.set(tmpB);
+    // 3) damped wave equation relaxed toward the target (wave speed ~ sqrt(g))
+    const c = clamp(0.07 * Math.sqrt(P.g), 0.07, 0.46), c2 = c * c, k2 = 0.035, gam = 0.09;
+    for (let sub = 0; sub < 2; sub++) {
+      for (let j = 0; j < ny; j++) {
+        const jm = j > 0 ? -nx : 0, jp = j < ny - 1 ? nx : 0;
+        for (let i = 0; i < nx; i++) {
+          const n = j * nx + i, im = i > 0 ? -1 : 0, ip = i < nx - 1 ? 1 : 0;
+          const lap = eta[n + im] + eta[n + ip] + eta[n + jm] + eta[n + jp] - 4 * eta[n];
+          etaV[n] += c2 * lap - k2 * (eta[n] - target[n]) - gam * etaV[n];
+        }
+      }
+      for (let n = 0; n < N; n++) eta[n] = clamp(eta[n] + etaV[n], -0.14, 0.14);
+    }
+    // 4) write vertices (+ a faint capillary shimmer so the surface never looks perfectly flat)
+    const t = performance.now() * 0.001;
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const n = j * nx + i;
+      sPos[n * 3 + 1] = D0 + eta[n] + 0.0014 * Math.sin(i * 0.9 + t * 2.3) * Math.sin(j * 1.1 - t * 1.9);
+    }
+    sGeo.attributes.position.needsUpdate = true; sGeo.computeVertexNormals();
+  }
+
+  /* --- obstacle meshes + solver mask --- */
+  const obsGroup = new THREE.Group(); group.add(obsGroup);
+  const steel = new THREE.MeshStandardMaterial({ color: 0xaab3bf, metalness: 0.95, roughness: 0.25, envMapIntensity: 1.3 });
+  function buildObstacle() {
+    while (obsGroup.children.length) { const m = obsGroup.children.pop(); m.geometry.dispose(); }
+    const o = OBS[P.obs], H = D0 + 0.12;
+    o.circles.forEach(c => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(c[2], c[2], H, 48), steel);
+      m.position.set(c[0] - Lx / 2, H / 2, c[1] - Wz / 2); m.castShadow = true; obsGroup.add(m);
+    });
+    o.polys.forEach(poly => {
+      const shape = new THREE.Shape(poly.map(p => new THREE.Vector2(p[0] - Lx / 2, -(p[1] - Wz / 2))));
+      const g = new THREE.ExtrudeGeometry(shape, { depth: H, bevelEnabled: false }); g.rotateX(-Math.PI / 2);
+      const m = new THREE.Mesh(g, steel); m.castShadow = true; obsGroup.add(m);
+    });
+    // solver mask: side walls are no-slip solid rows; obstacles from geometry
+    lbm.solid.fill(0);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const x = i * dx, z = j * dx; let s = (j === 0 || j === ny - 1);
+      for (const c of o.circles) if ((x - c[0]) * (x - c[0]) + (z - c[1]) * (z - c[1]) <= c[2] * c[2]) s = true;
+      if (!s) for (const poly of o.polys) if (pointInPoly(poly, x, z)) { s = true; break; }
+      lbm.solid[j * nx + i] = s ? 1 : 0;
+    }
+  }
+
+  /* --- tracers --- */
+  const LAYERS = [0.10, 0.27, 0.44], NSEED = 24, SP = 190;
+  const rib = new Ribbons(LAYERS.length * NSEED, SP); group.add(rib.mesh);
+  const TR = makeTrace(SP);
+  function updateTracers() {
+    const uc = lbm.uIn, cm = OBS[P.obs].cmax * uc;
+    let l = 0;
+    for (let s = 0; s < NSEED; s++) {
+      const yc = 2.5 + (ny - 5) * s / (NSEED - 1);
+      const n = traceLine(lbm, 1.5, yc, SP, 0.9, TR);
+      for (let ly = 0; ly < LAYERS.length; ly++, l++) {
+        for (let k = 0; k < n; k++) {
+          const ci = clamp(Math.round(TR.x[k]), 0, nx - 1), cj = clamp(Math.round(TR.y[k]), 0, ny - 1);
+          const yy = LAYERS[ly] + eta[cj * nx + ci] * (LAYERS[ly] / D0) * 0.8;
+          rib.setPoint(l, k, TR.x[k] * dx - Lx / 2, yy, TR.y[k] * dx - Wz / 2, TR.p[k], TR.v[k] / cm, fade(k, n));
+        }
+        rib.finishLine(l, n);
+      }
+    }
+    rib.commit();
+  }
+
+  /* --- flow-direction indicator --- */
+  const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-Lx / 2 + 0.05, 0.86, 0), 0.9, 0x7fd1ff, 0.18, 0.1);
+  group.add(arrow);
+  const lab = makeLabel('WATER FLOW  →', 0.9); lab.position.set(-Lx / 2 + 0.55, 1.0, 0); group.add(lab);
+
+  function relation() {
+    const o = OBS[P.obs];
+    const uLat = (0.03 + 0.07 * (P.U - 0.2) / 1.8) * o.uScale;
+    const nuLat = clamp(0.012 * P.visc, 0.008, 0.3);
+    return { uLat, nuLat, ReSim: uLat * (o.Lc / dx) / nuLat, RePhys: P.U * o.Lc / (1.0e-6 * P.visc), cmax: o.cmax };
+  }
+  function apply() {
+    const r = relation(); lbm.uIn = r.uLat; lbm.nu = r.nuLat;
+    rib.material.uniforms.uPeriod.value = 14 / r.uLat;
+    rib.material.uniforms.uMode.value = P.dye === 'dye' ? 1 : 0;
+    slice.visible = P.slice;
+  }
+  function reset() {
+    buildObstacle(); apply(); lbm.reset(lbm.uIn);
+    eta.fill(0); etaV.fill(0);
+    for (let k = 0; k < 40; k++) lbm.step();
+    updateTracers(); updateSurface(5); fillSlice(sliceTex, lbm, OBS[P.obs].cmax * lbm.uIn);
+  }
+  return {
+    id: 'water', group, lbm, P, apply, reset, rib,
+    title: 'Water flow around an obstacle',
+    desc: 'Plan-view solution in a glass tank: dye-like tracers follow the computed velocity field beneath a pressure-driven free surface.',
+    camera: { target: new THREE.Vector3(0, 0.12, 0), theta: 0.35, phi: 0.95, r: 4.9 },
+    legend: () => ({ dye: P.dye === 'dye', max: OBS[P.obs].cmax * P.U }),
+    frameUpdate(frame, spf) {
+      rib.material.uniforms.uPhase.value = lbm.steps % rib.material.uniforms.uPeriod.value;
+      if (frame % 2 === 0) updateTracers();
+      if (frame % 3 === 0 && P.slice) fillSlice(sliceTex, lbm, OBS[P.obs].cmax * lbm.uIn);
+      updateSurface(spf);
+    },
+    readouts() {
+      const r = relation(), pk = lbm.peakSpeed() / Math.max(lbm.uCur, 1e-4) * P.U, Fr = P.U / Math.sqrt(P.g * D0);
+      return [['Inflow speed', P.U.toFixed(2) + ' m/s'], ['Re (simulated)', r.ReSim.toFixed(0)],
+              ['Re (real water, ' + OBS[P.obs].Lc.toFixed(2) + ' m)', r.RePhys.toExponential(1)],
+              ['Froude number', Fr.toFixed(2)], ['Peak local speed', pk.toFixed(2) + ' m/s']];
+    }
+  };
+}
+
+/* ======================================================================
+   7. MODE 2 — AIRFLOW AROUND A CAR
+   ====================================================================== */
+function makeCarMode() {
+  const nx = 240, ny = 80, dx = 0.05;
+  const Lx = (nx - 1) * dx, Hy = (ny - 1) * dx, CAR_X0 = 3.2, TUN_W = 4.0;
+  const lbm = new LBM(nx, ny); lbm.trackForce = true;
+  const group = new THREE.Group();
+  const P = { U: 30, visc: 1.0, slice: true };
+  const CMAX = 1.6, FRONT_H = 1.45;
+
+  // Side-view silhouette of the car in metres (x forward, y up). Used for BOTH the 3-D model and the solver mask.
+  const LOWER = [[0.12, 0.24], [0.0, 0.42], [0.03, 0.62], [0.30, 0.76], [1.10, 0.90], [3.85, 0.93], [4.40, 0.92], [4.58, 0.84], [4.60, 0.55], [4.50, 0.30], [4.30, 0.24]];
+  const CABIN = [[1.10, 0.89], [1.95, 1.38], [2.20, 1.45], [2.85, 1.45], [3.25, 1.40], [3.85, 0.92]];
+  const GLASS = [[1.32, 0.93], [1.98, 1.34], [2.20, 1.40], [2.82, 1.40], [3.15, 1.36], [3.62, 0.96]];
+  const WHEELS = [[0.95, 0.33, 0.33], [3.55, 0.33, 0.33]];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const x = i * dx - CAR_X0, y = j * dx; let s = pointInPoly(LOWER, x, y) || pointInPoly(CABIN, x, y);
+    if (!s) for (const w of WHEELS) if ((x - w[0]) * (x - w[0]) + (y - w[1]) * (y - w[1]) <= w[2] * w[2]) { s = true; break; }
+    lbm.solid[j * nx + i] = s ? 1 : 0;
+  }
+
+  /* --- wind-tunnel scene --- */
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(Lx, TUN_W), new THREE.MeshStandardMaterial({ color: 0x151a21, roughness: 0.55, metalness: 0.25 }));
+  road.rotation.x = -Math.PI / 2; road.receiveShadow = true; group.add(road);
+  group.add(makeGrid(Lx, TUN_W, 1, 0.003, 0x3d4f63, 0.45));
+  const tunnel = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(Lx, Hy, TUN_W)),
+    new THREE.LineBasicMaterial({ color: 0x4a6078, transparent: true, opacity: 0.7 }));
+  tunnel.position.y = Hy / 2; group.add(tunnel);
+  const sliceTex = makeSliceTexture(nx, ny);
+  const slice = new THREE.Mesh(new THREE.PlaneGeometry(Lx, Hy),
+    new THREE.MeshBasicMaterial({ map: sliceTex.tex, transparent: true, opacity: 0.6, side: THREE.DoubleSide, toneMapped: false, depthWrite: false }));
+  slice.position.set(0, Hy / 2, -TUN_W / 2); group.add(slice);
+  const backPlate = new THREE.Mesh(new THREE.PlaneGeometry(Lx, Hy), new THREE.MeshBasicMaterial({ color: 0x0d1319, side: THREE.DoubleSide }));
+  backPlate.position.set(0, Hy / 2, -TUN_W / 2 - 0.01); group.add(backPlate);
+
+  /* --- car model, extruded from the same silhouette --- */
+  const car = new THREE.Group(); car.position.x = CAR_X0 - Lx / 2; group.add(car);
+  const ext = (poly, depth, bevel) => {
+    const shape = new THREE.Shape(poly.map(p => new THREE.Vector2(p[0], p[1])));
+    const g = new THREE.ExtrudeGeometry(shape, bevel
+      ? { depth, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.07, bevelOffset: -0.07, bevelSegments: 6, curveSegments: 1 }
+      : { depth, bevelEnabled: false });
+    g.translate(0, 0, -depth / 2); return g;
+  };
+  const paint = new THREE.MeshPhysicalMaterial({ color: 0xc4cad3, metalness: 0.92, roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.12, envMapIntensity: 1.25 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x0b1a28, metalness: 0.3, roughness: 0.05, transparent: true, opacity: 0.88, envMapIntensity: 1.8 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.55, metalness: 0.2 });
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = false; car.add(m); return m; };
+  add(ext(LOWER, 1.50, true), paint, 0, 0, 0);
+  add(ext(CABIN, 1.26, true), paint, 0, 0, 0);
+  add(ext(GLASS, 1.54, false), glass, 0, 0, 0);
+  add(new THREE.BoxGeometry(0.09, 0.47, 1.57), paint, 2.5, 1.165, 0);                      // B-pillar
+  [1.95, 3.0].forEach(x => add(new THREE.BoxGeometry(0.012, 0.50, 1.77), trim, x, 0.52, 0)); // door shut-lines
+  add(new THREE.BoxGeometry(0.04, 0.12, 0.72), trim, 0.0, 0.50, 0);                          // grille
+  [-1, 1].forEach(s => {
+    const head = new THREE.MeshStandardMaterial({ color: 0xfff2d0, emissive: 0xfff2d0, emissiveIntensity: 0.7, roughness: 0.1 });
+    const tail = new THREE.MeshStandardMaterial({ color: 0x8a0f14, emissive: 0xaa1218, emissiveIntensity: 0.8, roughness: 0.2 });
+    add(new THREE.BoxGeometry(0.05, 0.09, 0.32), head, 0.0, 0.60, s * 0.56);
+    add(new THREE.BoxGeometry(0.04, 0.10, 0.38), tail, 4.59, 0.70, s * 0.56);
+    add(new THREE.BoxGeometry(0.13, 0.08, 0.12), paint, 1.38, 1.0, s * 0.88);                // mirrors
+    WHEELS.forEach(w => {                                                                       // wheels
+      const tire = new THREE.Mesh(new THREE.CylinderGeometry(w[2], w[2], 0.23, 40), new THREE.MeshStandardMaterial({ color: 0x0b0b0d, roughness: 0.9 }));
+      tire.rotation.x = Math.PI / 2; tire.position.set(w[0], w[1], s * 0.75); tire.castShadow = true; car.add(tire);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(w[2] * 0.66, w[2] * 0.66, 0.235, 32), new THREE.MeshStandardMaterial({ color: 0xcfd5de, metalness: 1, roughness: 0.22, envMapIntensity: 1.4 }));
+      rim.rotation.x = Math.PI / 2; rim.position.set(w[0], w[1], s * 0.75); car.add(rim);
+      for (let a = 0; a < 5; a++) {                                                             // spokes
+        const sp = new THREE.Mesh(new THREE.BoxGeometry(w[2] * 1.15, 0.03, 0.01), new THREE.MeshStandardMaterial({ color: 0x20242b, metalness: 0.6, roughness: 0.4 }));
+        sp.position.set(w[0], w[1], s * 0.75 + s * 0.121); sp.rotation.z = a * Math.PI / 5; car.add(sp);
+      }
+    });
+  });
+
+  /* --- streamlines: one 2-D trace per seed height, replicated across span (see Model note) --- */
+  const SPAN = [-1.8, -1.35, -0.9, -0.45, 0, 0.45, 0.9, 1.35, 1.8];
+  const HEIGHTS = []; for (let k = 0; k < 22; k++) HEIGHTS.push(0.10 + 3.5 * Math.pow(k / 21, 1.6));
+  const SPTS = 200;
+  const rib = new Ribbons(SPAN.length * HEIGHTS.length, SPTS); group.add(rib.mesh);
+  const TR = makeTrace(SPTS);
+  function updateStreamlines() {
+    const cm = CMAX * lbm.uIn; let l = 0;
+    for (let h = 0; h < HEIGHTS.length; h++) {
+      const n = traceLine(lbm, 1.5, HEIGHTS[h] / dx, SPTS, 1.2, TR);
+      for (let s = 0; s < SPAN.length; s++, l++) {
+        const zw = SPAN[s], w = smoothstep(0.75, 1.45, Math.abs(zw)), tFree = 1 / CMAX;
+        for (let k = 0; k < n; k++) {
+          const ys = TR.y[k] * dx, y = HEIGHTS[h] + (ys - HEIGHTS[h]) * (1 - w);
+          const t = (TR.v[k] / cm) * (1 - w) + tFree * w;
+          rib.setPoint(l, k, TR.x[k] * dx - Lx / 2, y, zw, TR.p[k], t, fade(k, n));
+        }
+        rib.finishLine(l, n);
+      }
+    }
+    rib.commit();
+  }
+
+  /* --- direction indicator --- */
+  const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-Lx / 2 + 0.3, 3.55, 0), 1.9, 0x7fd1ff, 0.4, 0.22);
+  group.add(arrow);
+  const lab = makeLabel('AIRFLOW  →', 1.8); lab.position.set(-Lx / 2 + 1.25, 3.85, 0); group.add(lab);
+  const lab2 = makeLabel('WAKE', 1.0, '#9fc2e8'); lab2.position.set(CAR_X0 - Lx / 2 + 6.3, 2.2, -TUN_W / 2 + 0.05); group.add(lab2);
+
+  let cdSmooth = 0;
+  function relation() {
+    const uLat = 0.02 + 0.07 * (P.U - 5) / 55, nuLat = clamp(0.014 * P.visc, 0.008, 0.3), Lc = 4.6;
+    return { uLat, nuLat, ReSim: uLat * (Lc / dx) / nuLat, RePhys: P.U * Lc / (1.5e-5 * P.visc) };
+  }
+  function apply() {
+    const r = relation(); lbm.uIn = r.uLat; lbm.nu = r.nuLat;
+    rib.material.uniforms.uPeriod.value = 14 / r.uLat; rib.material.uniforms.uMode.value = 0; slice.visible = P.slice;
+  }
+  function reset() {
+    apply(); lbm.reset(lbm.uIn); cdSmooth = 0;
+    for (let k = 0; k < 40; k++) lbm.step();
+    updateStreamlines(); fillSlice(sliceTex, lbm, CMAX * lbm.uIn);
+  }
+  return {
+    id: 'car', group, lbm, P, apply, reset, rib,
+    title: 'Airflow around a car',
+    desc: 'Side-view solution in a wind-tunnel scene. Streamlines follow the computed air velocity; colour is speed. Look for the stagnation point on the nose, acceleration over the roof and the slow wake behind the car.',
+    camera: { target: new THREE.Vector3(0.3, 0.95, 0), theta: 0.62, phi: 1.2, r: 10.5 },
+    legend: () => ({ dye: false, max: CMAX * P.U }),
+    frameUpdate(frame) {
+      rib.material.uniforms.uPhase.value = lbm.steps % rib.material.uniforms.uPeriod.value;
+      if (frame % 2 === 0) updateStreamlines();
+      if (frame % 3 === 0 && P.slice) fillSlice(sliceTex, lbm, CMAX * lbm.uIn);
+    },
+    readouts() {
+      const r = relation(), pk = lbm.peakSpeed() / Math.max(lbm.uCur, 1e-4) * P.U;
+      const cd = lbm.fx / (0.5 * lbm.uCur * lbm.uCur * (FRONT_H / dx)); cdSmooth += (cd - cdSmooth) * 0.2;
+      return [['Air speed', P.U.toFixed(0) + ' m/s  (' + (P.U * 3.6).toFixed(0) + ' km/h)'], ['Re (simulated)', r.ReSim.toFixed(0)],
+              ['Re (real car, 4.6 m)', r.RePhys.toExponential(1)], ['Peak local speed', pk.toFixed(1) + ' m/s'],
+              ['C\u1d48 (2-D slice, indicative)', cdSmooth.toFixed(2)]];
+    }
+  };
+}
+
+/* ======================================================================
+   8. App wiring: modes, controls, legend, main loop
+   ====================================================================== */
+const modes = { water: makeWaterMode(), car: makeCarMode() };
+let active = null, paused = false, frameNo = 0, spf = 5, simMs = 6, lastRO = 0, toastT = 0;
+
+const logMap = (v, lo, hi) => lo * Math.pow(hi / lo, v / 100);
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toastT); toastT = setTimeout(() => t.style.display = 'none', 2600); }
+
+function drawLegend(dye) {
+  const c = $('lgCanvas'), g = c.getContext('2d'), w = c.width;
+  for (let x = 0; x < w; x++) {
+    const t = x / (w - 1);
+    if (dye) { g.fillStyle = 'rgb(' + (26 + 214 * t | 0) + ',' + (133 + 117 * t | 0) + ',' + (250 - 22 * t | 0) + ')'; }
+    else { const k = Math.round(t * 255) * 3; g.fillStyle = 'rgb(' + LUT[k] + ',' + LUT[k + 1] + ',' + LUT[k + 2] + ')'; }
+    g.fillRect(x, 0, 1, 12);
+  }
+}
+function updateLegend() {
+  if (!active) return;                       // sliders fire once during start-up, before a mode is active
+  const L = active.legend(); drawLegend(L.dye);
+  $('lgTitle').textContent = L.dye ? 'Tracer brightness ∝ flow speed (m/s)' : 'Flow speed (m/s)';
+  $('lgMid').textContent = (L.max / 2).toFixed(L.max < 10 ? 2 : 0); $('lgMax').textContent = L.max.toFixed(L.max < 10 ? 2 : 0) + ' m/s';
+}
+function cameraPreset(m) {
+  const asp = RES.x / Math.max(RES.y, 1), k = asp < 1.2 ? Math.pow(1.2 / asp, 0.7) : 1;      // pull back on portrait screens
+  return { target: m.camera.target.clone(), theta: m.camera.theta, phi: m.camera.phi, r: m.camera.r * k };
+}
+function setMode(id) {
+  if (active) scene.remove(active.group);
+  active = modes[id]; scene.add(active.group);
+  document.body.setAttribute('data-mode', id);
+  $('modeWater').classList.toggle('on', id === 'water'); $('modeCar').classList.toggle('on', id === 'car');
+  $('modeWater').setAttribute('aria-selected', id === 'water'); $('modeCar').setAttribute('aria-selected', id === 'car');
+  $('modeTitle').textContent = active.title; $('modeDesc').textContent = active.desc;
+  document.querySelectorAll('[data-for-list]').forEach(e => e.style.display = e.dataset.forList === id ? 'block' : 'none');
+  active.apply(); active.reset(); updateLegend(); orbit.animateTo(cameraPreset(active));
+}
+
+function fmtVisc(m, base) { return '×' + m.toFixed(2) + '  (ν ≈ ' + (base * m).toExponential(1) + ' m²/s)'; }
+// Water controls
+const W = modes.water, C = modes.car;
+$('wSpeed').addEventListener('input', e => { W.P.U = +e.target.value; $('wSpeedO').textContent = W.P.U.toFixed(2) + ' m/s'; W.apply(); updateLegend(); });
+$('wVisc').addEventListener('input', e => { W.P.visc = logMap(+e.target.value, 0.7, 20); $('wViscO').textContent = fmtVisc(W.P.visc, 1e-6); W.apply(); });
+$('wGrav').addEventListener('input', e => { W.P.g = +e.target.value; $('wGravO').textContent = W.P.g.toFixed(1) + ' m/s²'; });
+$('wObs').addEventListener('change', e => { W.P.obs = e.target.value; W.reset(); updateLegend(); });
+$('wDye').addEventListener('change', e => { W.P.dye = e.target.value; W.apply(); updateLegend(); });
+$('wSlice').addEventListener('change', e => { W.P.slice = e.target.checked; W.apply(); });
+// Car controls
+$('cSpeed').addEventListener('input', e => { C.P.U = +e.target.value; $('cSpeedO').textContent = C.P.U + ' m/s'; C.apply(); updateLegend(); });
+$('cVisc').addEventListener('input', e => { C.P.visc = logMap(+e.target.value, 0.6, 20); $('cViscO').textContent = fmtVisc(C.P.visc, 1.5e-5); C.apply(); });
+$('cSlice').addEventListener('change', e => { C.P.slice = e.target.checked; C.apply(); });
+// initialise displayed values
+$('wSpeed').dispatchEvent(new Event('input')); $('wVisc').dispatchEvent(new Event('input')); $('wGrav').dispatchEvent(new Event('input'));
+$('cSpeed').dispatchEvent(new Event('input')); $('cVisc').dispatchEvent(new Event('input'));
+
+$('modeWater').onclick = () => setMode('water');
+$('modeCar').onclick = () => setMode('car');
+$('btnPause').onclick = () => { paused = !paused; $('btnPause').textContent = paused ? 'Resume' : 'Pause'; };
+$('btnResetSim').onclick = () => { active.reset(); toast('Simulation reset'); };
+$('btnResetCam').onclick = () => orbit.animateTo(cameraPreset(active));
+$('panelToggle').onclick = () => {
+  const p = $('panel'); p.classList.toggle('collapsed'); $('panelToggle').setAttribute('aria-expanded', !p.classList.contains('collapsed'));
+  $('panelToggle').textContent = p.classList.contains('collapsed') ? 'Controls & model ▴' : 'Controls & model ▾';
+};
+if (window.matchMedia('(max-width:820px)').matches) { $('panel').classList.add('collapsed'); $('panelToggle').textContent = 'Controls & model ▴'; }
+
+function updateReadouts() {
+  const rows = active.readouts();
+  $('readouts').innerHTML = rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>').join('');
+}
+
+function resize() {
+  const r = stage.getBoundingClientRect(), w = Math.max(1, r.width | 0), h = Math.max(1, r.height | 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  const pr = renderer.getPixelRatio(); RES.set(w * pr, h * pr);
+  modes.water.rib.resize(); modes.car.rib.resize();
+}
+window.addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+
+/* ---- main loop ---- */
+let failed = false;
+function loop() {
+  requestAnimationFrame(loop);
+  if (failed) return;
+  try {
+    const sim = active;
+    if (!paused) {
+      const t0 = performance.now();
+      for (let k = 0; k < spf; k++) sim.lbm.step();
+      simMs += (performance.now() - t0 - simMs) * 0.1;
+      if (!sim.lbm.healthy()) { sim.reset(); toast('Solver became unstable at these settings — reset'); }
+      if (frameNo % 30 === 0) { if (simMs > 11 && spf > 2) spf--; else if (simMs < 4.5 && spf < 8) spf++; }   // adapt to device speed
+      frameNo++;
+      sim.frameUpdate(frameNo, spf);
+    }
+    orbit.update();
+    renderer.render(scene, camera);
+    const now = performance.now();
+    if (now - lastRO > 250) { updateReadouts(); lastRO = now; }
+  } catch (err) {
+    failed = true; showError('<b>Runtime error</b><br>' + String(err && err.message || err));
+    if (window.console) console.error(err);
+  }
+}
+
+resize();
+setMode('water');
+orbit.jumpTo(cameraPreset(active));
+loop();
+
+})();
+</script>
+</body>
+</html>
